@@ -55,6 +55,7 @@ $ heroku open
 ## Todos
 Missing or should be done:
 
+  * use DataFrames (some implementations must exist?)
   * get tests working (problem with imports)
     * how to even assert simple stuff like "val - expected < eps" ?
   * using getFile to read CSV, might be britle thus move to inputStream
@@ -63,6 +64,7 @@ Missing or should be done:
     * calculated data
     * if sha matches something in DB, no need to process CSV further
   * consider proper exception handling and protection, now we puke on various simple errors
+    * ensure vectors have identical lengths (now we index-based handling -> overflows)
   * fix "d" - it seems not to be Variation of Information :/
 
 
