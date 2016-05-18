@@ -44,8 +44,8 @@ object Application extends Controller {
     // Darn this horror. I spent over 2h messing around trying to
     // unroll results into JSON from all kinds of things. In the end
     // had to resort to this silly Map(mi -> (d, varname)).
-    val res = DataHandler.getResults(inName)
-    val json = Json.toJson(res.map {
+    lazy val res = DataHandler.getResults(inName)
+    lazy val json = Json.toJson(res.map {
       case (k,v) => (k,v)
     }.toList.sortBy{- _._1}.map(
       k => {
