@@ -67,6 +67,10 @@ object Application extends Controller {
     }
   }
 
+  /** Leaving this here for possible DB work
+   *
+   * This is code from the original example.
+   * */
   def db = Action {
     var out = ""
     val conn = DB.getConnection()

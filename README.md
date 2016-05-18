@@ -35,7 +35,9 @@ run
 
 In either case the app should be running on [localhost:9000](http://localhost:9000/).
 
-Note: Environment variable `DATABASE_URL` needs to be set to a Postgres DB. Remember`heroku local` may uses `.env` file, so change the var there. Use what values you have available locally for username, password, and dbname. Like this on Windows:
+Note: Environment variable `DATABASE_URL` needs to be set to a Postgres DB.
+
+Remember`heroku local` uses `.env` file, so change the var there. Use what values you have available locally for username, password, and dbname. Like this on Windows:
 
 ```
 set DATABASE_URL=postgres://<USER>:<PASSWORD>@localhost:5432/<DBNAME>
