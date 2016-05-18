@@ -58,6 +58,7 @@ Missing or should be done:
   * use DataFrames (some implementations must exist?)
   * get tests working (problem with imports)
     * how to even assert simple stuff like "val - expected < eps" ?
+  * consider splitting into more sensible classes
   * using getFile to read CSV, might be britle thus move to inputStream
   * store processed MI and d data to to DB
     * sha of the CSV
