@@ -126,35 +126,42 @@ object DataHandler {
     val results = mutable.HashMap[Double, Tuple6[Double, Double, Double, Double, Double, String]]()
 
     // Run inName against every other variable column
-    for (pred <- intData.indices.filter(_!=base)) {
-      val (clean1, clean2) = prepForJavaMI(intData(base), intData(pred))
-      val mi = calcMI(clean1, clean2)
-      val d = calcVariationOfInformation(mi, clean1, clean2)
-      results(mi) = (d, varNames(pred))
+    for (pred <- intData.indices.filter(_ != base)) {
+      //log.info(s" against : ${varNames(pred)}")
+      val (clean1, clean2) = prepArrays(intData(base), intData(pred))
+      val mi = calcMI(clean1.map(_.toDouble), clean2.map(_.toDouble))
+      val vi = calcVariationOfInformation(mi, clean1.map(_.toDouble), clean2.map(_.toDouble))
+      val d_tt = dCalculator.calcD(clean1, clean2, 1, 1)
+      val d_tf = dCalculator.calcD(clean1, clean2, 1, -1)
+      val d_ft = dCalculator.calcD(clean1, clean2, -1, 1)
+      val d_ff = dCalculator.calcD(clean1, clean2, -1, -1)
+      results(mi) = (d_tt, d_tf, d_ft, d_ff, vi, varNames(pred))
     }
     results
   }
 
-  /** Prepare two arrays for calculation (JavaMI)
+  /** Prepare two arrays for calculation
     *
-    * This
-    *  - removes any pair which has SKIP_FLAG in either
-    *  - converts values to Double (for JavaMI)
+    * - removes any pair which has SKIP_FLAG in either
     *
     * CSV data contained empty values, which were marked invalid upon
-    * reading. We remove them here before calculations on a pair-wise basis
+    * reading. We remove them here before calculations on a
+    * pair-wise basis.
+    * This causes us to loose some amount of information when calculating
+    * p(A) or p(B), since missing item in one destroys the pair in the
+    * other before calculations.
     *
     * @param unclean1 Array with possible invalid values
     * @param unclean2 Array with possible invalid values
-    * @return Tuple2 of Double Arrays with only valid pairs of data
+    * @return Tuple2 of Int Arrays with only valid pairs of data
     */
-  private def prepForJavaMI(unclean1: Array[Int], unclean2: Array[Int]) = {
-    val v1 = new mutable.ArrayBuffer[Double]()
-    val v2 = new mutable.ArrayBuffer[Double]()
+  private def prepArrays(unclean1: Array[Int], unclean2: Array[Int]) = {
+    val v1 = new mutable.ArrayBuffer[Int]()
+    val v2 = new mutable.ArrayBuffer[Int]()
     for (i <- unclean1.indices) {
       if (unclean1(i) != SKIP_FLAG && unclean2(i) != SKIP_FLAG) {
-        v1 += unclean1(i).toDouble
-        v2 += unclean2(i).toDouble
+        v1 += unclean1(i)
+        v2 += unclean2(i)
       }
     }
     (v1.toArray, v2.toArray)
@@ -210,5 +217,79 @@ object DataHandler {
   def calcVariationOfInformation(mi: Double, v1: Array[Double], v2: Array[Double]): Double = {
     val res = Entropy.calculateEntropy(v1) + Entropy.calculateEntropy(v2) - 2 * mi
     res
+  }
+}
+
+/**
+  * Here we handle "d" calculation - read below for more.
+  */
+object dCalculator {
+  private val log = Logger("dCalculator")
+
+  /** Calculate d =  p(A&B) / p(A)p(B) 'tween 2 arrays
+    *
+    * This "d" gives a view into the direction connection between the
+    * states of A and B. Where Mutual Information gives an indication
+    * of how much you can infer of the state of B when you
+    * only know the A. So MI gives a measure covering all the states,
+    * but "d" is per-state-pair.
+    * If the states would be "true" and "false", then "d" could be
+    * calculated between say A(x=true) and B(y=true), or any other
+    * pairing.
+    *
+    * Meaning:
+    * If d=2 it means that the "state" x (in A) doubles the probability
+    * of "state" y (in B). With d=0.5 y's probability would be halved.
+    *
+    * @param A Array of n kinds of "states". Must pair up with B's states.
+    * @param B   -- " -- ... A's
+    * @param x State from A s.t. p(A=x)  (and x is in A !!)
+    * @param y State from B s.t. p(B=y)  (and y is in B !!)
+    * @return Value of d for given pair of states
+    */
+  def calcD(A: Array[Int], B: Array[Int], x: Int, y: Int): Double = {
+
+    val pA = mutable.HashMap[Int, Double]()
+    val pB = mutable.HashMap[Int, Double]()
+    val pAandB = mutable.HashMap[Tuple2[Int, Int], Double]()
+
+    /**
+      * Calculate pA, pB, and p(A&B) and store them for later use
+      */
+    def prepareCalcD(A: Array[Int], Bb: Array[Int]) = {
+      // 1) get probabilities of states
+      // 2) get probabilities of mutual states
+      val len: Double = A.length
+      val nA = mutable.HashMap[Int, Int]()
+      val nB = mutable.HashMap[Int, Int]()
+      val nAandB = mutable.HashMap[Tuple2[Int, Int], Int]()
+      (A zip B) foreach { pair => {
+        nA(pair._1) = nA.getOrElse(pair._1, 0) + 1
+        nB(pair._2) = nB.getOrElse(pair._2, 0) + 1
+        nAandB((pair._1, pair._2)) = nAandB.getOrElse((pair._1, pair._2), 0) + 1
+      }}
+      // Calculate and store the actual probabilities
+      nA foreach ( (x) => pA(x._1) = x._2 / len )
+      nB foreach ( (x) => pB(x._1) = x._2 / len )
+      nAandB foreach ( (x) => pAandB(x._1) = x._2 / len )
+    }
+
+    prepareCalcD(A, B)
+    // States that are missing completely should get some value.
+    // If they are missing, their probability is most likely quite rare.
+    // BUT exceptional values start to dominate the "d".
+    // It explodes and becomes fantastical with default value Q:
+    //  Q/(Q*0.08)  , or Q/(Q*Q)  <- those mean nothing.
+    //
+    // Hence we give will skip these cases and mark them with 0.0
+    var d: Double = 0.0
+    if ((A contains x) && (B contains y)) {
+      // TODO: remove this default after unittests start working
+      val default: Double = 1.0 / (2 * A.length)
+      d = pAandB.getOrElse((x, y), default) /  (
+        pA.getOrElse(x, default) * pB.getOrElse(y, default))
+    }
+
+    d
   }
 }

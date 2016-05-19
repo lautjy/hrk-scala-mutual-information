@@ -44,8 +44,12 @@ object Application extends Controller {
       k => {
         Json.obj(
           "mi" -> k._1,
-          "d" -> k._2._1,
-          "variable_name" -> k._2._2
+          "d_tt" -> k._2._1,
+          "d_tf" -> k._2._2,
+          "d_ft" -> k._2._3,
+          "d_ff" -> k._2._4,
+          "vi" -> k._2._5,
+          "variable_name" -> k._2._6
         )
       }
     ))
