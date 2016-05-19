@@ -57,16 +57,14 @@ Missing or should be done:
 
   * use DataFrames (some implementations must exist?)
   * get tests working (problem with imports)
-    * how to even assert simple stuff like "val - expected < eps" ?
-  * consider splitting into more sensible classes
-  * using getFile to read CSV, might be britle thus move to inputStream
+    * http://stackoverflow.com/questions/26113181/changes-to-build-sbt-to-enable-scalatest-tests-to-run-with-scala-play
+  * using getFile to read CSV, might be brittle thus move to inputStream
   * store processed MI and d data to to DB
     * sha of the CSV
     * calculated data
     * if sha matches something in DB, no need to process CSV further
   * consider proper exception handling and protection, now we puke on various simple errors
     * ensure vectors have identical lengths (now we index-based handling -> overflows)
-  * fix "d" - it seems not to be Variation of Information :/
 
 
 ## Extra Documentation
