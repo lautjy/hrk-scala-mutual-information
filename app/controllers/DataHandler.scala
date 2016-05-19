@@ -12,38 +12,26 @@ import JavaMI.Entropy
 import JavaMI.MutualInformation
 
 
-/** Handles CSV reading and Mutual Information calculation
-  *
-  * Reads CSV data once and remembers it while the session lasts.
-  *
+/**
+  * Handles CSV reading
   */
-object DataHandler {
-  val log = Logger("DataHandler")
-  val SKIP_FLAG = 1000  // marks item to be skipped in analysis
-  private val DEFAULT_CSV = "conf/data/dataset.csv"
-  lazy private val CSV_TEXT = scala.io.Source.fromInputStream(
-      Play.resourceAsStream("public/data/dataset.csv") match
-        { case Some(s) => s}
-   )
+object CsvReader {
+  val log = Logger("CSVReader")
 
-  // Use getAllFromCsv to access these. Stored after 1st read
-  private var preReadNames: Option[Array[String]] = None
-  private var preReadData: Option[Array[Array[Int]]] = None
-
-  /** String to Int, non Ints get value "SKIP_FLAG"
+  /** String to Int, non-Ints get value "skipValue"
     *
     * This method is tuned to the known format of CSV data.
-    * It is expected that only -1, 0, or 1 are actual values.
+    * It is expected that only integers come from the CSV.
     * CSV is known to contain empty fields, those will be marked
-    * "as invalid values" determined by the SKIP_FLAG value.
+    * "as invalid values" determined by the skipValue.
     *
     * @return Int
     */
-  private def toIntWithSkip(s: String): Int = {
+  private def toIntWithSkip(s: String, skipValue: Int): Int = {
     try {
       s.toInt
     } catch {
-      case e: Exception => SKIP_FLAG
+      case e: Exception => skipValue
     }
   }
 
@@ -55,7 +43,7 @@ object DataHandler {
     *
     * @return (List of variable names, Int[][] transpose of the data (with Skip flags))
     */
-  private def readCsvFromFile(csvPath: String) = {
+  def readCsvFromFile(csvPath: String, skipValue: Int) = {
     log.info(s"Reading CSV: $csvPath")
     val iter: Iterator[String] = Source.fromFile(Play.getFile(csvPath)).getLines
 
@@ -64,9 +52,32 @@ object DataHandler {
 
     // Read rest of csv
     val rows = mutable.ArrayBuffer[Array[Int]]()
-    iter.foreach(rows += _.split(",", -1).drop(1).map(toIntWithSkip(_)))
+    iter.foreach(rows += _.split(",", -1).drop(1).map(toIntWithSkip(_, skipValue)))
     (names, rows.toArray.transpose)
   }
+}
+
+/**
+  * Main handler that calls CSV reading, calculation, and sends back
+  * a Map of the salient values.
+  *
+  * Reads CSV data once and remembers it while the session lasts.
+  */
+object DataHandler {
+  val log = Logger("DataHandler")
+  val SKIP_FLAG = 1000  // marks item to be skipped in analysis
+  private val DEFAULT_CSV = "conf/data/dataset.csv"
+
+  // Might consider using this streaming method - might work in more cases
+  /*
+  lazy private val CSV_TEXT = scala.io.Source.fromInputStream(
+    Play.resourceAsStream("public/data/dataset.csv") match { case Some(s) => s}
+  )
+  */
+
+  // Use getAllFromCsv to access these. Stored after 1st read
+  private var preReadNames: Option[Array[String]] = None
+  private var preReadData: Option[Array[Array[Int]]] = None
 
   /** Main access for the CSV data
     *
@@ -77,16 +88,18 @@ object DataHandler {
     */
   def getAllFromCsv = {
     if (preReadNames.isEmpty || preReadData.isEmpty) {
-
       log.info("Data not found, Reading from CSV")
-      val (names, datas) = readCsvFromFile(DEFAULT_CSV)
-
+      val (names, datas) = CsvReader.readCsvFromFile(DEFAULT_CSV, SKIP_FLAG)
       preReadNames = Some(names)
       preReadData = Some(datas)
     }
     // TODO: This unpacking just seems wrong...
-    val retNames = preReadNames match { case Some(x) => x }
-    val retData = preReadData match { case Some(x) => x }
+    val retNames = preReadNames match {
+      case Some(x) => x
+    }
+    val retData = preReadData match {
+      case Some(x) => x
+    }
     (retNames, retData)
   }
 
@@ -95,7 +108,7 @@ object DataHandler {
     getAllFromCsv._1
   }
 
-  /** Returns mi and d results for given variable_name
+  /** Returns MI, d -values and VI for given variable_name
     *
     * Consider handling:
     * Does not protect against calling with wrong names.
@@ -109,8 +122,8 @@ object DataHandler {
     val (varNames, intData) = getAllFromCsv
     val base = varNames.indexOf(inName)
 
-    // TODO: Structure of results was determined by clumsy JSON creation downstream
-    val results = mutable.HashMap[Double, Tuple2[Double, String]]()
+    // TODO: Structure of results is determined by clumsy JSON creation downstream
+    val results = mutable.HashMap[Double, Tuple6[Double, Double, Double, Double, Double, String]]()
 
     // Run inName against every other variable column
     for (pred <- intData.indices.filter(_!=base)) {
@@ -156,9 +169,9 @@ object DataHandler {
     *
     * We are using Java-based JavaMI here for quick results.
     * Based on code review it
-    *   - seems to do I(X,Y) properly
-    *   - uses log_2
-    *   - uses 0*log(0/q) = 0 as default for missing cases between v1 and v2
+    * - seems to do I(X,Y) properly
+    * - uses log_2
+    * - uses 0*log(0/q) = 0 as default for missing cases between v1 and v2
     *
     * Other way to handle default value would be to give missing cases a default
     * probability of "if corpus was twice as large the case would appear once".
@@ -182,10 +195,10 @@ object DataHandler {
     * item's cluster in clustering Y.
     *
     * We are using the formula:
-    *   VI(X; Y) = H(X) + H(Y) = 2I(X; Y)
+    * VI(X; Y) = H(X) + H(Y) = 2I(X; Y)
     *
     * For more see for ex.:
-    *   http://www.cs.umd.edu/class/spring2009/cmsc858l/InfoTheoryHints.pdf
+    * http://www.cs.umd.edu/class/spring2009/cmsc858l/InfoTheoryHints.pdf
     *
     * Note: v1 and v2 are expected to be same length.
     *
@@ -195,7 +208,7 @@ object DataHandler {
     * @return VI as a Double value
     */
   def calcVariationOfInformation(mi: Double, v1: Array[Double], v2: Array[Double]): Double = {
-    val res = Entropy.calculateEntropy(v1) + Entropy.calculateEntropy(v2) - 2*mi
+    val res = Entropy.calculateEntropy(v1) + Entropy.calculateEntropy(v2) - 2 * mi
     res
   }
 }

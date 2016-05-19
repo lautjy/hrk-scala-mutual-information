@@ -28,22 +28,15 @@ object Application extends Controller {
 
   /** Get JSON data for a variable of its MI and d
     *
-    * TODO: rewrite
-    * Mutual information
-    *  provides a robust measure of dependency between random variables
-    *  (constrast with correletion).
-    *
     * Responds 404 with JSON explanation if inName not found in data,
-    *  and JSON list of Mutual Informations for every other variable.
+    * and JSON list of Mutual Informations for every other variable.
     *
     * @param inName: name of variable that was in data
     * */
   def mutual(inName: String) = Action {
     log.info(s"MI requested for $inName")
 
-    // Darn this horror. I spent over 2h messing around trying to
-    // unroll results into JSON from all kinds of things. In the end
-    // had to resort to this silly Map(mi -> (d, varname)).
+    // TODO: unroll these from a nice map or something
     lazy val res = DataHandler.getResults(inName)
     lazy val json = Json.toJson(res.map {
       case (k,v) => (k,v)
